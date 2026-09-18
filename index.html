@@ -1,0 +1,163 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>School Todos</title>
+  <meta name="description" content="Track school todos by class.">
+  <meta name="theme-color" content="#f5f5f7" media="(prefers-color-scheme: light)">
+  <meta name="theme-color" content="#000000" media="(prefers-color-scheme: dark)">
+
+  <!-- iOS home-screen app -->
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="default">
+  <meta name="apple-mobile-web-app-title" content="Todos">
+  <link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+  <link rel="icon" type="image/png" sizes="192x192" href="icons/icon-192.png">
+  <link rel="manifest" href="manifest.webmanifest">
+
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <header class="topbar">
+    <div class="topbar-row">
+      <h1 id="viewTitle">All classes</h1>
+      <button class="icon-btn" id="manageBtn" aria-label="Manage classes">
+        <svg viewBox="0 0 24 24" width="24" height="24" aria-hidden="true"><path fill="currentColor" d="M12 15.5A3.5 3.5 0 1 1 12 8.5a3.5 3.5 0 0 1 0 7zm7.43-2.53c.04-.32.07-.64.07-.97s-.03-.66-.07-1l2.11-1.63a.5.5 0 0 0 .12-.64l-2-3.46a.5.5 0 0 0-.61-.22l-2.49 1a7.3 7.3 0 0 0-1.69-.98l-.38-2.65A.49.49 0 0 0 14 2h-4a.49.49 0 0 0-.49.42l-.38 2.65c-.61.25-1.17.58-1.69.98l-2.49-1a.5.5 0 0 0-.61.22l-2 3.46a.49.49 0 0 0 .12.64L4.57 11c-.04.34-.07.67-.07 1s.03.65.07.97l-2.11 1.66a.49.49 0 0 0-.12.64l2 3.46c.12.22.39.3.61.22l2.49-1.01c.52.4 1.08.73 1.69.98l.38 2.65c.03.24.24.42.49.42h4c.25 0 .46-.18.49-.42l.38-2.65c.61-.25 1.17-.58 1.69-.98l2.49 1.01c.22.08.49 0 .61-.22l2-3.46a.5.5 0 0 0-.12-.64l-2.11-1.66z"/></svg>
+      </button>
+    </div>
+    <nav class="chips" id="chips" aria-label="Classes"></nav>
+  </header>
+
+  <main id="main">
+    <div class="toolbar" id="toolbar">
+      <div class="segmented" id="tabs" role="tablist">
+        <button role="tab" data-tab="active" class="on">Active</button>
+        <button role="tab" data-tab="completed">Completed</button>
+      </div>
+      <div class="toolbar-row">
+        <label class="select-wrap">
+          <span>Sort</span>
+          <select id="sortSel">
+            <option value="due">Due date</option>
+            <option value="importance">Importance</option>
+            <option value="created">Newest</option>
+          </select>
+        </label>
+        <label class="select-wrap">
+          <span>Show</span>
+          <select id="filterSel">
+            <option value="1">All levels</option>
+            <option value="2">2+ importance</option>
+            <option value="3">3+ importance</option>
+            <option value="4">4+ importance</option>
+            <option value="5">5 only</option>
+          </select>
+        </label>
+      </div>
+    </div>
+
+    <section id="list" aria-live="polite"></section>
+  </main>
+
+  <button class="fab" id="addBtn" aria-label="Add todo">
+    <svg viewBox="0 0 24 24" width="28" height="28" aria-hidden="true"><path fill="currentColor" d="M11 5h2v6h6v2h-6v6h-2v-6H5v-2h6z"/></svg>
+  </button>
+
+  <!-- Todo editor -->
+  <dialog id="todoDlg" class="sheet">
+    <form method="dialog" id="todoForm" autocomplete="off">
+      <div class="sheet-head">
+        <button type="button" class="link" data-close>Cancel</button>
+        <h2 id="todoDlgTitle">New todo</h2>
+        <button type="submit" class="link strong" value="save">Save</button>
+      </div>
+
+      <label class="field">
+        <span>Title</span>
+        <input id="tTitle" name="title" required maxlength="200" placeholder="e.g. Chapter 5 problem set">
+      </label>
+
+      <label class="field">
+        <span>Class</span>
+        <select id="tCat" name="categoryId" required></select>
+      </label>
+
+      <div class="field">
+        <span>Importance</span>
+        <div class="importance-pick" id="tImp" role="radiogroup" aria-label="Importance">
+          <button type="button" data-v="1" role="radio">1</button>
+          <button type="button" data-v="2" role="radio">2</button>
+          <button type="button" data-v="3" role="radio">3</button>
+          <button type="button" data-v="4" role="radio">4</button>
+          <button type="button" data-v="5" role="radio">5</button>
+        </div>
+        <small class="hint">1 = low · 5 = critical</small>
+      </div>
+
+      <div class="field">
+        <span>Due date</span>
+        <div class="date-row">
+          <input id="tDue" name="due" type="date">
+          <button type="button" class="pill" data-due="0">Today</button>
+          <button type="button" class="pill" data-due="1">Tmrw</button>
+          <button type="button" class="pill" data-due="">None</button>
+        </div>
+      </div>
+
+      <label class="field">
+        <span>Notes</span>
+        <textarea id="tNotes" name="notes" rows="4" maxlength="4000" placeholder="Details, page numbers, links…"></textarea>
+      </label>
+
+      <button type="button" class="danger-btn" id="tDelete" hidden>Delete todo</button>
+    </form>
+  </dialog>
+
+  <!-- Manage classes -->
+  <dialog id="manageDlg" class="sheet">
+    <div class="sheet-head">
+      <span></span>
+      <h2>Classes</h2>
+      <button type="button" class="link strong" data-close>Done</button>
+    </div>
+    <ul class="cat-list" id="catList"></ul>
+    <button type="button" class="primary-btn" id="addCatBtn">+ Add class</button>
+
+    <h3 class="section-label">Backup</h3>
+    <p class="muted small">Your todos are stored only on this device. Export a backup now and then.</p>
+    <div class="btn-row">
+      <button type="button" class="secondary-btn" id="exportBtn">Export</button>
+      <label class="secondary-btn file-btn">Import<input type="file" id="importInput" accept="application/json,.json" hidden></label>
+    </div>
+  </dialog>
+
+  <!-- Class editor -->
+  <dialog id="catDlg" class="sheet">
+    <form method="dialog" id="catForm" autocomplete="off">
+      <div class="sheet-head">
+        <button type="button" class="link" data-close>Cancel</button>
+        <h2 id="catDlgTitle">New class</h2>
+        <button type="submit" class="link strong" value="save">Save</button>
+      </div>
+      <label class="field">
+        <span>Name</span>
+        <input id="cName" required maxlength="60" placeholder="e.g. Biology 101">
+      </label>
+      <div class="field">
+        <span>Color</span>
+        <div class="swatches" id="cColors"></div>
+      </div>
+      <button type="button" class="danger-btn" id="cDelete" hidden>Delete class</button>
+    </form>
+  </dialog>
+
+  <div class="toast" id="toast" role="status" hidden>
+    <span id="toastMsg"></span>
+    <button type="button" id="toastAction"></button>
+  </div>
+
+  <script src="app.js"></script>
+</body>
+</html>
