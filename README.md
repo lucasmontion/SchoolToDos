@@ -6,6 +6,7 @@ A small offline-first todo PWA for tracking schoolwork by class. Plain HTML/CSS/
 - Todos with importance 1–5, due date, and notes
 - Per-class **Active / Completed** tabs, with undo
 - **All classes** view grouped by Overdue / Today / Tomorrow / This week / Later
+- **Calendar view** (toggle in the top bar) — month grid with a dot per due date, tap a day to see and add todos due then
 - Sort (due date, importance, newest) and filter by importance
 - Data stays on the device (`localStorage`); export/import a JSON backup from the ⚙️ sheet
 

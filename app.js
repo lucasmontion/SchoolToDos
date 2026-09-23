@@ -7,7 +7,7 @@ const COLORS = [
   '#e5383b', '#f06a00', '#e0a100', '#2a9d58', '#14a3a3', '#0a66ff',
   '#5b5bd6', '#a347d1', '#d6409f', '#8d6e63', '#607d8b', '#3a3a3c',
 ];
-const DEFAULT_PREFS = { view: 'all', tab: 'active', sort: 'due', minImp: 1 };
+const DEFAULT_PREFS = { view: 'all', tab: 'active', sort: 'due', minImp: 1, mode: 'list' };
 
 const uid = () =>
   (self.crypto && crypto.randomUUID)
@@ -41,6 +41,7 @@ function normalize(raw) {
     }));
   const prefs = { ...DEFAULT_PREFS, ...(raw.prefs || {}) };
   if (prefs.view !== 'all' && !catIds.has(prefs.view)) prefs.view = 'all';
+  if (prefs.mode !== 'calendar') prefs.mode = 'list';
   return { categories, todos, prefs };
 }
 
@@ -133,7 +134,7 @@ const SORTS = { due: byDue, importance: byImportance, created: byCreated };
 const listEl = $('#list');
 
 function render({ scrollChip = false } = {}) {
-  const { view, tab, sort, minImp } = state.prefs;
+  const { view, tab, sort, minImp, mode } = state.prefs;
   const cat = view === 'all' ? null : catById(view);
 
   $('#viewTitle').textContent = cat ? cat.name : 'All classes';
@@ -142,12 +143,13 @@ function render({ scrollChip = false } = {}) {
   document.querySelectorAll('#tabs button').forEach((b) =>
     b.classList.toggle('on', b.dataset.tab === tab));
 
-  // Toolbar visibility: tabs only in a class; sort only for a class's active list.
-  $('#tabs').hidden = !cat;
-  $('#sortSel').closest('label').hidden = !cat || tab === 'completed';
+  // Toolbar visibility: tabs only in a class's list view; sort only for a class's active list.
+  $('#tabs').hidden = mode === 'calendar' || !cat;
+  $('#sortSel').closest('label').hidden = mode === 'calendar' || !cat || tab === 'completed';
   $('#toolbar').hidden = state.categories.length === 0;
 
   renderChips(scrollChip);
+  updateModeUI();
 
   if (state.categories.length === 0) {
     listEl.innerHTML = `
@@ -159,6 +161,8 @@ function render({ scrollChip = false } = {}) {
       </div>`;
     return;
   }
+
+  if (mode === 'calendar') return renderCalendar();
 
   if (!cat) return renderAll(minImp);
 
@@ -264,6 +268,114 @@ function renderChips(scrollActive) {
   }
 }
 
+/* ================= Calendar ================= */
+
+const CAL_SVG = '<svg viewBox="0 0 24 24" width="24" height="24" aria-hidden="true"><path fill="currentColor" d="M7 2v2H5a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6a2 2 0 0 0-2-2h-2V2h-2v2H9V2H7zm12 6v11H5V9h14zM5 6h14v1H5V6zm2 5h4v4H7v-4z"/></svg>';
+const LIST_SVG = '<svg viewBox="0 0 24 24" width="24" height="24" aria-hidden="true"><path fill="currentColor" d="M4 6h2v2H4V6zm4 0h12v2H8V6zM4 11h2v2H4v-2zm4 0h12v2H8v-2zM4 16h2v2H4v-2zm4 0h12v2H8v-2z"/></svg>';
+
+function todayMonthStart() {
+  const d = new Date();
+  return new Date(d.getFullYear(), d.getMonth(), 1);
+}
+let calMonth = todayMonthStart();
+let calSelectedDate = todayStr();
+
+function updateModeUI() {
+  const on = state.prefs.mode === 'calendar';
+  const btn = $('#calBtn');
+  btn.innerHTML = on ? LIST_SVG : CAL_SVG;
+  btn.setAttribute('aria-label', on ? 'List view' : 'Calendar view');
+  btn.classList.toggle('on', on);
+  listEl.hidden = on;
+  $('#calendarView').hidden = !on;
+}
+
+function calendarTodos() {
+  const { view, minImp } = state.prefs;
+  return state.todos.filter((t) =>
+    !t.completed && t.due && t.importance >= minImp && (view === 'all' || t.categoryId === view));
+}
+
+function renderCalendar() {
+  const byDate = {};
+  for (const t of calendarTodos()) (byDate[t.due] ||= []).push(t);
+
+  const y = calMonth.getFullYear(), m = calMonth.getMonth();
+  $('#calMonthLabel').textContent = calMonth.toLocaleDateString(undefined, { month: 'long', year: 'numeric' });
+
+  const first = new Date(y, m, 1);
+  const gridStart = new Date(y, m, 1 - first.getDay());
+
+  let cells = '';
+  for (let i = 0; i < 42; i++) {
+    const d = new Date(gridStart.getFullYear(), gridStart.getMonth(), gridStart.getDate() + i);
+    const dateStr = ymd(d);
+    const items = byDate[dateStr] || [];
+    const dots = items.slice(0, 4).map((t) => {
+      const c = catById(t.categoryId);
+      return `<i style="--c:${c ? c.color : '#8e8e93'}"></i>`;
+    }).join('');
+    const extra = items.length > 4 ? `<span class="more">+${items.length - 4}</span>` : '';
+    const cls = [
+      d.getMonth() === m ? '' : 'out',
+      dateStr === todayStr() ? 'today' : '',
+      dateStr === calSelectedDate ? 'sel' : '',
+    ].filter(Boolean).join(' ');
+    cells += `
+      <button type="button" class="cal-day ${cls}" data-date="${dateStr}">
+        <span class="num">${d.getDate()}</span>
+        <span class="dots">${dots}${extra}</span>
+      </button>`;
+  }
+  $('#calGrid').innerHTML = cells;
+
+  const selItems = (byDate[calSelectedDate] || []).slice().sort(byImportance);
+  $('#calDayHeading').textContent = parseYmd(calSelectedDate)
+    .toLocaleDateString(undefined, { weekday: 'long', month: 'long', day: 'numeric' });
+  $('#calDayList').innerHTML = selItems.length
+    ? `<div class="cards">${selItems.map((t) => card(t, state.prefs.view === 'all')).join('')}</div>`
+    : `<p class="muted small cal-empty">Nothing due this day.</p>`;
+}
+
+$('#calBtn').addEventListener('click', () => {
+  state.prefs.mode = state.prefs.mode === 'calendar' ? 'list' : 'calendar';
+  if (state.prefs.mode === 'calendar') {
+    calMonth = todayMonthStart();
+    calSelectedDate = todayStr();
+  }
+  save();
+  render();
+});
+
+$('#calPrev').addEventListener('click', () => {
+  calMonth = new Date(calMonth.getFullYear(), calMonth.getMonth() - 1, 1);
+  renderCalendar();
+});
+$('#calNext').addEventListener('click', () => {
+  calMonth = new Date(calMonth.getFullYear(), calMonth.getMonth() + 1, 1);
+  renderCalendar();
+});
+$('#calToday').addEventListener('click', () => {
+  calMonth = todayMonthStart();
+  calSelectedDate = todayStr();
+  renderCalendar();
+});
+
+$('#calGrid').addEventListener('click', (e) => {
+  const btn = e.target.closest('.cal-day');
+  if (!btn) return;
+  const dateStr = btn.dataset.date;
+  const d = parseYmd(dateStr);
+  if (d.getMonth() !== calMonth.getMonth() || d.getFullYear() !== calMonth.getFullYear()) {
+    calMonth = new Date(d.getFullYear(), d.getMonth(), 1);
+  }
+  calSelectedDate = dateStr;
+  renderCalendar();
+});
+
+$('#calAddBtn').addEventListener('click', () => openTodo(null, calSelectedDate));
+$('#calDayList').addEventListener('click', handleTodoCardClick);
+
 /* ================= Toast ================= */
 
 let toastTimer;
@@ -318,7 +430,7 @@ function setImportance(v) {
   });
 }
 
-function openTodo(todo = null) {
+function openTodo(todo = null, presetDue = null) {
   if (state.categories.length === 0) {
     toast('Add a class first');
     openCat();
@@ -334,7 +446,7 @@ function openTodo(todo = null) {
 
   $('#tTitle').value = todo ? todo.title : '';
   $('#tCat').value = todo ? todo.categoryId : defaultCat;
-  $('#tDue').value = todo ? todo.due : '';
+  $('#tDue').value = todo ? todo.due : (presetDue || '');
   $('#tNotes').value = todo ? todo.notes : '';
   setImportance(todo ? todo.importance : 3);
   $('#tDelete').hidden = !todo;
@@ -556,22 +668,10 @@ $('#tabs').addEventListener('click', (e) => {
 $('#sortSel').addEventListener('change', (e) => { state.prefs.sort = e.target.value; save(); render(); });
 $('#filterSel').addEventListener('change', (e) => { state.prefs.minImp = Number(e.target.value); save(); render(); });
 
-listEl.addEventListener('click', (e) => {
+function handleTodoCardClick(e) {
   const actionEl = e.target.closest('[data-action]');
   if (!actionEl) return;
   const action = actionEl.dataset.action;
-
-  if (action === 'add-class') { openCat(); return; }
-
-  if (action === 'clear-completed') {
-    const catId = state.prefs.view;
-    const n = state.todos.filter((t) => t.categoryId === catId && t.completed).length;
-    if (!confirm(`Permanently delete ${n} completed todo${n === 1 ? '' : 's'}?`)) return;
-    state.todos = state.todos.filter((t) => !(t.categoryId === catId && t.completed));
-    save();
-    render();
-    return;
-  }
 
   const cardEl = actionEl.closest('.todo');
   const todo = cardEl && state.todos.find((t) => t.id === cardEl.dataset.id);
@@ -597,9 +697,29 @@ listEl.addEventListener('click', (e) => {
       });
     }, 200);
   }
+}
+
+listEl.addEventListener('click', (e) => {
+  const actionEl = e.target.closest('[data-action]');
+  if (!actionEl) return;
+
+  if (actionEl.dataset.action === 'add-class') { openCat(); return; }
+
+  if (actionEl.dataset.action === 'clear-completed') {
+    const catId = state.prefs.view;
+    const n = state.todos.filter((t) => t.categoryId === catId && t.completed).length;
+    if (!confirm(`Permanently delete ${n} completed todo${n === 1 ? '' : 's'}?`)) return;
+    state.todos = state.todos.filter((t) => !(t.categoryId === catId && t.completed));
+    save();
+    render();
+    return;
+  }
+
+  handleTodoCardClick(e);
 });
 
-$('#addBtn').addEventListener('click', () => openTodo());
+$('#addBtn').addEventListener('click', () =>
+  openTodo(null, state.prefs.mode === 'calendar' ? calSelectedDate : null));
 
 // Re-render when the app comes back to the foreground so "today"/"overdue" stay correct.
 document.addEventListener('visibilitychange', () => { if (!document.hidden) render(); });
